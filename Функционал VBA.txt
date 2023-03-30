@@ -1,0 +1,54 @@
+константа - Const <name> = <equals>;
+Public intA As Integer - global const;
+объявление переменной - Dim <name1> As <type>,<name2> As <type>;
+Types:
+Integer, Double, String (Dim <name> As String * number),
+Boolean, Char.
+Array: Dim <name>(number) As <type> or Dim <name> As <type> *Enter* <name> = number;
+Dynamic array: Dim <name>() As <type>   (???);
+Enumuration: Enum <nameType> *Enter* <name> ( = <equals>) *Enter* ... End Enum;
+1) For <name> As <type> = <eq1> To <eq2> (Step <eq3>)
+   *Внутренний цикл*
+   Next
+2) For Each <name> As <type> In <array>
+    *Внутренний цикл*
+   NextС
+3) While (условие) (AndAlso (условие2))
+	*Внутренний цикл*
+   End While
+4) Do While (условие)
+	*внутренний цикл*
+   Loop
+5) Do Until (условие)
+	*внутренний цикл*
+   Loop
+6) If (условие) Then
+...
+Else (ElseIf (условие) Then)
+...
+End If
+
+Console.WriteLine ("text {0}",name)
+Console.WriteLine("Результат умножения чисел {0} и {1} равен {2}", num1, num2, num1 * num2)
+Console.ReadLine ()
+
+Sub Main()
+...
+End Sub
+
+Function <name>(<переменная> As <type>) As <typeExit>
+...
+End Function
+
+Module <name>
+...
+End Module
+
+Abs:
+<name> = Abs(<name> or number)
+Sqr: (=Sqrt)
+<name> = Sqr(<name> or number)
+Rnd:
+<name> = Int((6 * Rnd) + 1)  *Int((upperbound - lowerbound + 1) * Rnd + lowerbound) 
+Len:
+<name> = Len(<name> or number) 
