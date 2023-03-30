@@ -110,7 +110,7 @@ def _make_parser():
     #for_cond = expr + TO.suppress() + expr
     for_body = stmt | pp.Group(SEMI).setName('stmt_list')
 
-    if_ = IF.suppress() + LPAR + expr + RPAR + stmt + pp.Optional(pp.Keyword("Else").suppress() + stmt) + END.suppress() + IF.suppress()
+    if_ = IF.suppress() + LPAR + expr + RPAR + pp. Keyword('Then') + stmt + pp.Optional(pp.Keyword("Else").suppress() + stmt) + END.suppress() + IF.suppress()
     while_ = WHILE.suppress() + LPAR + expr + RPAR + stmt + END.suppress() + WHILE.suppress()
     do_ = DO_WHILE.suppress() + LBRACE + expr + RBRACE + stmt + LOOP.suppress()
     for_ = FOR.suppress() + vars_for + for_body + NEXT.suppress() + ident
