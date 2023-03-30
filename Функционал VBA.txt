@@ -4,27 +4,19 @@ Public intA As Integer - global const;
 Types:
 Integer, Double, String (Dim <name> As String * number),
 Boolean, Char.
-Array: Dim <name>(number) As <type> or Dim <name> As <type> *Enter* <name> = number;
-Dynamic array: Dim <name>() As <type>   (???);
-Enumuration: Enum <nameType> *Enter* <name> ( = <equals>) *Enter* ... End Enum;
+Array: Dim <name>(number) As <type>;
 1) For <name> As <type> = <eq1> To <eq2> (Step <eq3>)
    *Внутренний цикл*
-   Next
-2) For Each <name> As <type> In <array>
-    *Внутренний цикл*
-   NextС
-3) While (условие) (AndAlso (условие2))
+   Next <name>
+2) While (условие) (AndAlso (условие2))
 	*Внутренний цикл*
    End While
-4) Do While (условие)
+3) Do While (условие)
 	*внутренний цикл*
    Loop
-5) Do Until (условие)
-	*внутренний цикл*
-   Loop
-6) If (условие) Then
+4) If (условие) Then
 ...
-Else (ElseIf (условие) Then)
+Else
 ...
 End If
 
@@ -32,17 +24,9 @@ Console.WriteLine ("text {0}",name)
 Console.WriteLine("Результат умножения чисел {0} и {1} равен {2}", num1, num2, num1 * num2)
 Console.ReadLine ()
 
-Sub Main()
-...
-End Sub
-
 Function <name>(<переменная> As <type>) As <typeExit>
 ...
 End Function
-
-Module <name>
-...
-End Module
 
 Abs:
 <name> = Abs(<name> or number)
