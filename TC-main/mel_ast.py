@@ -167,17 +167,17 @@ class BinOp(Enum):
     SUB = '-'
     MUL = '*'
     DIV = '/'
-    MOD = '%'
+    MOD = 'Mod'
     GE = '>='
     LE = '<='
     NEQUALS = '<>'
     EQUALS = '=='
     GT = '>'
     LT = '<'
-    BIT_AND = '&'
-    BIT_OR = '|'
-    LOGICAL_AND = '&&'
-    LOGICAL_OR = '||'
+    BIT_AND = 'And'
+    BIT_OR = 'Or'
+    LOGICAL_AND = 'AndAlso'
+    LOGICAL_OR = 'OrElse'
 
 
 class BinOpNode(ExprNode):
@@ -293,18 +293,16 @@ class IfNode(StmtNode):
 
 
 class ForNode(StmtNode):
-    def __init__(self, init: Union[StmtNode, None], cond: Union[ExprNode, StmtNode, None],
-                 step: Union[StmtNode, None], body: Union[StmtNode, None] = None,
+    def __init__(self, cond: StmtNode, expr: ExprNode, then_stmt: StmtNode,
                  row: Optional[int] = None, line: Optional[int] = None, **props):
         super().__init__(row=row, line=line, **props)
-        self.init = init if init else _empty
-        self.cond = cond if cond else _empty
-        self.step = step if step else _empty
-        self.body = body if body else _empty
+        self.cond = cond
+        self.expr = expr
+        self.then_stmt = then_stmt
 
     @property
-    def childs(self) -> Tuple[AstNode, ...]:
-        return self.init, self.cond, self.step, self.body
+    def childs(self) -> tuple[StmtNode, ExprNode, StmtNode]:
+        return self.cond, self.expr, self.then_stmt
 
     def __str__(self) -> str:
         return 'for'

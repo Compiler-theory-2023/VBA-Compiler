@@ -36,27 +36,3 @@ Rnd:
 <name> = Int((6 * Rnd) + 1)  *Int((upperbound - lowerbound + 1) * Rnd + lowerbound) 
 Len:
 <name> = Len(<name> or number) 
-
-prog = '''
-        void myFunc(int[] a, boolean b) {
-
-            if (a>5) then
-                Dim a = 14 As int
-            else
-                Dim a = 47 As int
-            end if
-
-            while (a>5)
-                Dim a = 14 As int
-            end while
-
-            do while (a>5)
-                Dim a = 14 As int
-            Loop
-
-            Dim a As int
-            for b As int = 1 To 2
-            Next
-        }
-
-    '''

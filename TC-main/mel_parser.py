@@ -53,7 +53,7 @@ parser = Lark('''
     GT:      ">"
     LT:      "<"
 
-    call: ident "(" ( expr ( "," expr )* )? ")"
+    call: ident  ( expr ( "," expr )* )? 
     
     type_list: (type ("," type)*)?
     
@@ -95,7 +95,7 @@ parser = Lark('''
     
     ?vars_decl_list: (vars_decl ";")* 
 
-    ?simple_stmt: "Dim" ident (("," ident)*)?  ( "=" expr )? "As" simple_type -> assign
+    ?simple_stmt: ident ("As" simple_type)? "=" expr -> assign
         | call
 
     ?for_stmt_list: vars_decl
@@ -108,7 +108,7 @@ parser = Lark('''
     ?stmt: vars_decl 
         | simple_stmt 
         | "If" "(" expr ")" (expr "(" expr ")")*  "Then" stmt_list ("Else" ("If" "(" expr ")" (expr "(" expr ")")* "Then")? stmt_list)* "End If" -> if
-        | "For" ident "As" simple_type "=" expr "To" expr for_body "Next" ident -> for
+        | "For" simple_stmt "To" expr  stmt_list "Next" ident-> for
         | "While" "(" expr ")" (expr "(" expr ")")*  stmt "End While"-> while
         | "Do" "While" "(" expr ")" stmt_list "Loop"-> do_while
         | "{" stmt_list "}"
