@@ -4,27 +4,25 @@ import mel_parser
 
 def main():
     prog = '''
-        void myFunc(int[] a, boolean b) {
-        
-            if (a>5) then
-                Dim a = 14 As int
-            else 
-                Dim a = 47 As int
-            end if  
+        Function myFunc(a As Integer, b As Boolean) As Integer
+            Dim c As Integer
             
-            while (a>5) 
-                Dim a = 14 As int
-            end while                 
+            If (a>5) Then
+                Dim a = 14 As Integer
+            Else 
+                Dim a = 47 As Integer
+            End If  
             
-            do while (a>5) 
-                Dim a = 14 As int
+            While (a>5) 
+                Dim a = 14 As Integer
+            End While                 
+            
+            Do While (a>5) 
+                Dim a = 14 As Integer
             Loop
         
-                    
-            for a As int = 1 To 2
-            Dim a = 14 As int
-            Next
-        }
+           
+        End Function
     
     '''
     prog = mel_parser.parse(prog)

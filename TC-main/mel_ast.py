@@ -355,7 +355,7 @@ class StmtListNode(StmtNode):
 
 
 class FuncNode(StmtNode):
-    def __init__(self, return_type: FuncReturnTypeNode, name: IdentNode, func_vars: FuncVarsListNode,
+    def __init__(self, name: IdentNode, func_vars: FuncVarsListNode, return_type: FuncReturnTypeNode,
                  stmt_list: StmtListNode,
                  row: Optional[int] = None, line: Optional[int] = None, **props):
         super().__init__(row=row, line=line, **props)

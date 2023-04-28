@@ -17,12 +17,11 @@ parser = Lark('''
         |  "//" /(.)+/ NEWLINE
     %ignore COMMENT
     
-    INT:        "int"
-    CHAR:       "char"
-    STRING:     "string"
-    BOOLEAN:    "boolean"
-    DOUBLE:     "double"
-    VOID:       "void"
+    INTEGER:    "Integer"
+    CHAR:       "Char"
+    STRING:     "String"
+    BOOLEAN:    "Boolean"
+    DOUBLE:     "Double"
     
     TRUE:       "True"
     FALSE:      "False"
@@ -32,8 +31,8 @@ parser = Lark('''
     char: ESCAPED_CHAR  -> literal
     str: ESCAPED_STRING  -> literal
     bool: (TRUE|FALSE)  -> literal
-    simple_type: INT | CHAR | STRING | BOOLEAN | DOUBLE
-    array_type: simple_type "[" "]"
+    simple_type: INTEGER | CHAR | STRING | BOOLEAN | DOUBLE
+    array_type: simple_type "(" expr ")"
     type: simple_type | array_type | delegate
     ident: CNAME
     ?complex_ident: ident | ident"[" expr "]"
@@ -42,14 +41,14 @@ parser = Lark('''
     SUB:     "-"
     MUL:     "*"
     DIV:     "/"
-    MOD:     "%"
-    AND:     "&&"
-    OR:      "||"
-    BIT_AND: "&"
-    BIT_OR:  "|"
+    MOD:     "Mod"
+    AND:     "AndAlso"
+    OR:      "OrElse"
+    BIT_AND: "And"
+    BIT_OR:  "Or"
     GE:      ">="
     LE:      "<="
-    NEQUALS: "!="
+    NEQUALS: "<>"
     EQUALS:  "=="
     GT:      ">"
     LT:      "<"
@@ -96,7 +95,7 @@ parser = Lark('''
     
     ?vars_decl_list: (vars_decl ";")* 
 
-    ?simple_stmt: "Dim" complex_ident "=" expr "As" simple_type -> assign
+    ?simple_stmt: "Dim" ident (("," ident)*)?  ( "=" expr )? "As" simple_type -> assign
         | call
 
     ?for_stmt_list: vars_decl
@@ -105,22 +104,22 @@ parser = Lark('''
         |   -> stmt_list
     ?for_body: stmt
         |   -> stmt_list
-    
+                
     ?stmt: vars_decl 
         | simple_stmt 
-        | "if" "(" expr ")" "then" stmt_list ("else" stmt_list)? "end if" -> if
-        | "for" complex_ident "As" simple_type "=" expr "To" expr for_body "Next" -> for
-        | "while" "(" expr ")" ("AndAlso" "(" expr ")")? stmt "end while"-> while
-        | "do" "while" "(" expr ")" stmt_list "Loop"-> do_while
+        | "If" "(" expr ")" (expr "(" expr ")")*  "Then" stmt_list ("Else" ("If" "(" expr ")" (expr "(" expr ")")* "Then")? stmt_list)* "End If" -> if
+        | "For" ident "As" simple_type "=" expr "To" expr for_body "Next" ident -> for
+        | "While" "(" expr ")" (expr "(" expr ")")*  stmt "End While"-> while
+        | "Do" "While" "(" expr ")" stmt_list "Loop"-> do_while
         | "{" stmt_list "}"
 
     stmt_list: ( stmt )*
     
-    ?func_var: type ident
+    ?func_var: ident "As" type
     ?func_vars_list: (func_var ("," func_var)*)?
     
-    func_return_type: type | VOID   
-    func: func_return_type ident "(" func_vars_list ")" "{" stmt_list "}"
+    func_return_type: "As" type 
+    func: "Function" ident "(" func_vars_list ")" func_return_type stmt_list "End Function" 
     
     ?prog: (func | vars_decl_list)*
 
