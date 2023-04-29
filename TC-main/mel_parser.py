@@ -31,7 +31,7 @@ parser = Lark('''
     char: ESCAPED_CHAR  -> literal
     str: ESCAPED_STRING  -> literal
     bool: (TRUE|FALSE)  -> literal
-    simple_type: INTEGER | CHAR | STRING | BOOLEAN | DOUBLE
+    simple_type: INTEGER | STRING | CHAR | BOOLEAN | DOUBLE
     array_type: simple_type "(" expr ")"
     type: simple_type | array_type | delegate
     ident: CNAME
@@ -103,15 +103,15 @@ parser = Lark('''
     ?for_cond: expr
         |   -> stmt_list
     ?for_body: stmt
-        |   -> stmt_list
+        | -> stmt_list
                 
     ?stmt: vars_decl 
-        | simple_stmt 
-        | "If" "(" expr ")" (expr "(" expr ")")*  "Then" stmt_list ("Else" ("If" "(" expr ")" (expr "(" expr ")")* "Then")? stmt_list)* "End If" -> if
+        | "Dim" simple_stmt
+        | "If" "(" expr ")"  "Then" stmt_list ("Else" stmt_list)? "End If" -> if
         | "For" simple_stmt "To" expr  stmt_list "Next" ident-> for
-        | "While" "(" expr ")" (expr "(" expr ")")*  stmt "End While"-> while
+        | "While" "(" expr ")"   stmt "End While"-> while
         | "Do" "While" "(" expr ")" stmt_list "Loop"-> do_while
-        | "{" stmt_list "}"
+        
 
     stmt_list: ( stmt )*
     
@@ -154,7 +154,34 @@ class MelASTBuilder(InlineTransformer):
 
 
 def parse(prog: str) -> StmtListNode:
-    prog = parser.parse(str(prog))
-    # print(prog.pretty('  '))
-    prog = MelASTBuilder().transform(prog)
-    return prog
+    locs = []
+    row, col = 0, 0
+    for ch in prog:
+        if ch == '\n':
+            row += 1
+            col = 0
+        elif ch == '\r':
+            pass
+        else:
+            col += 1
+        locs.append((row, col))
+
+    old_init_action = AstNode.init_action
+
+    def init_action(node: AstNode) -> None:
+        loc = getattr(node, 'loc', None)
+        if isinstance(loc, int):
+            node.row = locs[loc][0] + 1
+            node.col = locs[loc][1] + 1
+
+    AstNode.init_action = init_action
+    try:
+        prog: StmtListNode = parser.parse(str(prog))
+        prog.program = True
+        prog = MelASTBuilder().transform(prog)
+        return prog
+    finally:
+        AstNode.init_action = old_init_action
+
+
+
