@@ -2,6 +2,23 @@ from typing import Tuple, Any, Dict, Optional
 from enum import Enum
 
 
+class KeyWord(Enum):
+    IF = 'If'
+    THEN = 'Then'
+    ELSE = 'Else'
+    END = 'End'
+    WHILE = 'While'
+    DO = 'Do'
+    LOOP = 'Loop'
+    FOR = 'For'
+    AS = 'As'
+    TO = 'To'
+    NEXT = 'Next'
+
+    def __str__(self):
+        return self.value
+
+
 class BinOp(Enum):
     """Перечисление возможных биранных операций
     """
@@ -40,7 +57,8 @@ class BaseType(Enum):
         return self.value
 
 
-VOID, CHAR, INT, DOUBLE, BOOL, STR = BaseType.VOID, BaseType.CHAR, BaseType.INT, BaseType.DOUBLE, BaseType.BOOL, BaseType.STR
+VOID, CHAR, INT, DOUBLE, BOOL, STR = BaseType.VOID, BaseType.CHAR, BaseType.INT, BaseType.DOUBLE, BaseType.BOOL,\
+    BaseType.STR
 
 
 class TypeDesc:
@@ -130,8 +148,7 @@ class ScopeType(Enum):
 
 
 class IdentDesc:
-    """Класс для описания переменых
-    """
+
 
     def __init__(self, name: str, type_: TypeDesc, scope: ScopeType = ScopeType.GLOBAL, index: int = 0) -> None:
         self.name = name
@@ -145,8 +162,6 @@ class IdentDesc:
 
 
 class IdentScope:
-    """Класс для представлений областей видимости переменных во время семантического анализа
-    """
 
     def __init__(self, parent: Optional['IdentScope'] = None) -> None:
         self.idents: Dict[str, IdentDesc] = {}
@@ -219,8 +234,6 @@ class IdentScope:
 
 
 class SemanticException(Exception):
-    """Класс для исключений во время семантического анализаё
-    """
 
     def __init__(self, message, row: int = None, col: int = None, **kwargs: Any) -> None:
         if row or col:
@@ -320,6 +333,7 @@ BIN_OP_TYPE_COMPATIBILITY = {
 BUILT_IN_OBJECTS = '''
 
 '''
+
 
 def prepare_global_scope() -> IdentScope:
     from mel_parser import parse

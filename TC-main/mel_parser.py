@@ -26,16 +26,27 @@ parser = Lark('''
     TRUE:       "True"
     FALSE:      "False"
     ESCAPED_CHAR: "\'" /./ "\'"
-
+    
+    IF: "If"
+    THEN: "Then"
+    ELSE: "Else"
+    END: "End"
+    DO: "Do"
+    WHILE: "While"
+    LOOP: "Loop"
+    FOR: "For"
+    AS: "As"
+    TO: "To"
+    NEXT: "Next"
+    DIM: "Dim"
+    
     num: NUMBER  -> literal
     char: ESCAPED_CHAR  -> literal
     str: ESCAPED_STRING  -> literal
     bool: (TRUE|FALSE)  -> literal
-    simple_type: INTEGER | STRING | CHAR | BOOLEAN | DOUBLE
-    array_type: simple_type "(" expr ")"
-    type: simple_type | array_type | delegate
+    type: INTEGER | STRING | CHAR | BOOLEAN | DOUBLE
     ident: CNAME
-    ?complex_ident: ident | ident"[" expr "]"
+    key: IF | THEN | ELSE | END | DO | WHILE | LOOP | FOR | AS | TO | NEXT | DIM -> key
 
     ADD:     "+"
     SUB:     "-"
@@ -57,11 +68,11 @@ parser = Lark('''
     
     type_list: (type ("," type)*)?
     
-    ?delegate: "delegate" "<" type_list ":" func_return_type ">"
+    ?delegate: "delegate" "<" type_list ":" "As" type ">"
     
     ?group: num | char| str | bool
-        | complex_ident
-        | call
+        | ident
+        | key
         | "(" expr ")"
 
     ?mult: group
@@ -85,43 +96,35 @@ parser = Lark('''
     ?expr: logical_or
     
     ?expr_list: "{" expr ( "," expr )* "}"
-
-    ?var_decl_inner: ident | ident "=" expr  -> assign
         
-    ?var_array_decl_inner: ident | ident "=" expr_list  -> assign
+    ?assign: ident "As" type ("=" expr)?-> vars_assign
     
-    ?vars_decl: (simple_type |delegate) var_decl_inner ( "," var_decl_inner )* 
-        | type var_array_decl_inner ( "," var_array_decl_inner )*
-    
-    ?vars_decl_list: (vars_decl ";")* 
+    ?vars_assign: ident "=" expr -> assign
 
-    ?simple_stmt: ident ("As" simple_type)? "=" expr -> assign
-        | call
-
-    ?for_stmt_list: vars_decl
-        | ( simple_stmt ( "," simple_stmt )* )?  -> stmt_list
+    ?for_stmt_list: ( assign ( "," assign )* )?  -> stmt_list
     ?for_cond: expr
         |   -> stmt_list
     ?for_body: stmt
-        | -> stmt_list
-                
-    ?stmt: vars_decl 
-        | "Dim" simple_stmt
-        | "If" "(" expr ")"  "Then" stmt_list ("Else" stmt_list)? "End If" -> if
-        | "For" simple_stmt "To" expr  stmt_list "Next" ident-> for
-        | "While" "(" expr ")"   stmt "End While"-> while
-        | "Do" "While" "(" expr ")" stmt_list "Loop"-> do_while
-        
-
-    stmt_list: ( stmt )*
     
-    ?func_var: ident "As" type
+    ?return: "Return" expr -> return
+        
+    ?stmt: func
+        | "If" "(" expr ")" "Then" stmt ("Else" stmt)? "End If" -> if
+        | "For" assign "To" expr  stmt "Next" -> for
+        | "Do" "While" "(" expr ")" stmt "Loop"-> do_while
+        | "While" "(" expr ")" stmt "End While"-> while
+        | return
+        | "Dim" assign
+        | vars_assign
+      
+    ?stmt_list: ( stmt )*
+    
+    ?func_var: ident "As" type -> func_var
     ?func_vars_list: (func_var ("," func_var)*)?
     
-    func_return_type: "As" type 
-    func: "Function" ident "(" func_vars_list ")" func_return_type stmt_list "End Function" 
+    func: "Function" ident "(" func_vars_list ")" "As" type stmt_list "End Function" 
     
-    ?prog: (func | vars_decl_list)*
+    ?prog: (stmt_list | func)*
 
     ?start: prog
 ''', start='start')  # , parser='lalr')
@@ -153,7 +156,7 @@ class MelASTBuilder(InlineTransformer):
             return get_node
 
 
-def parse(prog: str) -> StmtListNode:
+def parse(prog: str) -> ProgNode:
     locs = []
     row, col = 0, 0
     for ch in prog:
@@ -176,7 +179,7 @@ def parse(prog: str) -> StmtListNode:
 
     AstNode.init_action = init_action
     try:
-        prog: StmtListNode = parser.parse(str(prog))
+        prog: ProgNode = parser.parse(str(prog))
         prog.program = True
         prog = MelASTBuilder().transform(prog)
         return prog

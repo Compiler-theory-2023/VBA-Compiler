@@ -1,10 +1,10 @@
 import re
 from abc import ABC
 from contextlib import suppress
-from typing import Callable, Tuple, Optional, Union
-from enum import Enum
+from typing import Callable, Tuple, Optional
 from mel_semantic import TYPE_CONVERTIBILITY, BIN_OP_TYPE_COMPATIBILITY, BinOp, \
-    TypeDesc, IdentDesc, ScopeType, IdentScope, SemanticException
+    TypeDesc, IdentDesc, ScopeType, IdentScope, SemanticException, BaseType, KeyWord
+from msil import CodeLabel, CodeGenerator
 
 
 class AstNode(ABC):
@@ -47,14 +47,14 @@ class AstNode(ABC):
 
     @property
     def tree(self) -> [str, ...]:
-        res = [str(self)]
+        res = [str(self.to_str_full())]
         childs_temp = self.childs
         for i, child in enumerate(childs_temp):
             ch0, ch = '├', '│'
             if i == len(childs_temp) - 1:
                 ch0, ch = '└', ' '
             res.extend(((ch0 if j == 0 else ch) + ' ' + s for j, s in enumerate(child.tree)))
-        return res
+        return tuple(res)
 
     def __getitem__(self, index):
         return self.childs[index] if index < len(self.childs) else None
@@ -80,21 +80,13 @@ class ExprNode(AstNode, ABC):
     pass
 
 
-class VarType(Enum):
-    INT = 'int'
-    CHAR = 'char'
-    STRING = 'string'
-    BOOLEAN = 'boolean'
-    DOUBLE = 'double'
-    VOID = 'void'
-
 class LiteralNode(ExprNode):
 
     def __init__(self, literal: str,
                  row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
         super().__init__(row=row, line=line, **props)
         self.literal = literal
-        if literal in ('true', 'false'):
+        if literal in ('True', 'False'):
             self.value = bool(literal)
         else:
             self.value = eval(literal)
@@ -105,7 +97,6 @@ class LiteralNode(ExprNode):
     def semantic_check(self, scope: IdentScope) -> None:
         if isinstance(self.value, bool):
             self.node_type = TypeDesc.BOOL
-        # проверка должна быть позже bool, т.к. bool наследник от int
         elif isinstance(self.value, int):
             self.node_type = TypeDesc.INT
         elif isinstance(self.value, float):
@@ -136,10 +127,6 @@ class IdentNode(ExprNode):
 
 
 class TypeNode(IdentNode):
-    """Класс для представления в AST-дереве типов данный
-           (при появлении составных типов данных должен быть расширен)
-    """
-
     def __init__(self, name: str,
                  row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
         super().__init__(name, row=row, line=line, **props)
@@ -155,210 +142,14 @@ class TypeNode(IdentNode):
             self.semantic_error('Неизвестный тип {}'.format(self.name))
 
 
-class TypeConvertNode(ExprNode):
-    """Класс для представления в AST-дереве операций конвертации типов данных
-       (в языке программирования может быть как expression, так и statement)
-    """
-
-    def __init__(self, expr: ExprNode, type_: TypeDesc,
-                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
-        super().__init__(row=row, col=col, **props)
-        self.expr = expr
-        self.type = type_
-        self.node_type = type_
-
-    def __str__(self) -> str:
-        return 'convert'
-
-    @property
-    def childs(self) -> Tuple[AstNode, ...]:
-        return (_GroupNode(str(self.type), self.expr),)
-
-
-def type_convert(expr: ExprNode, type_: TypeDesc, except_node: Optional[AstNode] = None,
-                 comment: Optional[str] = None) -> ExprNode:
-    """Метод преобразования ExprNode узла AST-дерева к другому типу
-    :param expr: узел AST-дерева
-    :param type_: требуемый тип
-    :param except_node: узел, о которого будет исключение
-    :param comment: комментарий
-    :return: узел AST-дерева c операцией преобразования
-    """
-
-    if expr.node_type is None:
-        except_node.semantic_error('Тип выражения не определен')
-    if expr.node_type == type_:
-        return expr
-    if expr.node_type.is_simple and type_.is_simple and \
-            expr.node_type.base_type in TYPE_CONVERTIBILITY and type_.base_type in TYPE_CONVERTIBILITY[expr.node_type.base_type]:
-        return TypeConvertNode(expr, type_)
-    else:
-        (except_node if except_node else expr).semantic_error('Тип {0}{2} не конвертируется в {1}'.format(
-            expr.node_type, type_, ' ({})'.format(comment) if comment else ''
-        ))
-
-
-class StmtNode(ExprNode, ABC):
-    """Абстракный класс для деклараций или инструкций в AST-дереве
-    """
-
-    def to_str_full(self):
-        return self.to_str()
-
-
-class AssignNode(StmtNode):
-    """Класс для представления в AST-дереве оператора присваивания
-    """
-
-    def __init__(self, ident: IdentNode, var: VarType, val: ExprNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
-        super().__init__(row=row, Line=line, **props)
-        self.ident = ident
-        self.var = var
-        self.val = val
-
-    def __str__(self) -> str:
-        return '='
-
-    @property
-    def childs(self) -> Tuple[IdentNode, VarType, ExprNode]:
-        return self.ident, self.var, self.val
-
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.var.semantic_check(scope)
-        self.val.semantic_check(scope)
-        self.val = type_convert(self.val, self.var.node_type, self, 'присваиваемое значение')
-        self.node_type = self.var.node_type
-
-
-class VarsNode(StmtNode):
-    """Класс для представления в AST-дереве объявления переменнных
-    """
-
-    def __init__(self, type_: TypeNode, *vars_: Union[IdentNode, 'AssignNode'],
-                 row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
-        super().__init__(row=row, line=line, **props)
-        self.type = type_
-        self.vars = vars_
-
-    def __str__(self) -> str:
-        return str(self.type)
-
-    @property
-    def childs(self) -> Tuple[AstNode, ...]:
-        return self.vars
-
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.type.semantic_check(scope)
-        for var in self.vars:
-            var_node: IdentNode = var.var if isinstance(var, AssignNode) else var
-            try:
-                scope.add_ident(IdentDesc(var_node.name, self.type.type))
-            except SemanticException as e:
-                var_node.semantic_error(e.message)
-            var.semantic_check(scope)
-        self.node_type = TypeDesc.VOID
-
-
-class ReturnNode(StmtNode):
-    """Класс для представления в AST-дереве оператора return
-    """
-
-    def __init__(self, val: ExprNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
-        super().__init__(row=row, line=line, **props)
-        self.val = val
-
-    def __str__(self) -> str:
-        return 'Return'
-
-    @property
-    def childs(self) -> Tuple[ExprNode]:
-        return (self.val, )
-
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.val.semantic_check(IdentScope(scope))
-        func = scope.curr_func
-        if func is None:
-            self.semantic_error('Оператор return применим только к функции')
-        self.val = type_convert(self.val, func.func.type.return_type, self, 'возвращаемое значение')
-        self.node_type = TypeDesc.VOID
-
-
-class VarType(Enum):
-    INT = 'Integer'
-    CHAR = 'Char'
-    STRING = 'String'
-    BOOLEAN = 'Boolean'
-    DOUBLE = 'Double'
-
-
-class FuncVarNode(ExprNode):
-    def __init__(self, type_: TypeNode, ident: IdentNode,
+class KeyNode(ExprNode):
+    def __init__(self, key: KeyWord,
                  row: Optional[int] = None, line: Optional[int] = None, **props):
         super().__init__(row=row, line=line, **props)
-        self.type = type_
-        self.ident = ident
-
-    @property
-    def childs(self) -> tuple[TypeNode, IdentNode]:
-        return self.type, self.ident
+        self.key = key
 
     def __str__(self) -> str:
-        return 'var-sign'
-
-
-class FuncVarsListNode(ExprNode):
-    def __init__(self, *vars: FuncVarNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props):
-        super().__init__(row=row, line=line, **props)
-        self.vars = vars
-
-    @property
-    def childs(self) -> Tuple[FuncVarNode, ...]:
-        return self.vars
-
-    def __str__(self) -> str:
-        return 'func-vars'
-
-
-class SimpleTypeNode(ExprNode):
-    def __init__(self, type_: TypeNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props):
-        super().__init__(row=row, line=line, **props)
-        self.type = type_
-
-    def __str__(self) -> str:
-        return str(self.type)
-
-
-class ArrayTypeNode(ExprNode):
-    def __init__(self, type_: TypeNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props):
-        super().__init__(row=row, line=line, **props)
-        self.type = type_
-
-    def __str__(self) -> str:
-        return 'array {0}'.format(str(self.type))
-
-
-#TODO What is this?
-class TypeListNode(ExprNode):
-    def __init__(self, *types: TypeNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props):
-        super().__init__(row=row, line=line, **props)
-        self.types = types
-
-    @property
-    def childs(self) -> Tuple[TypeNode, ...]:
-        return self.types
-
-    def __str__(self) -> str:
-        return 'type-list'
-
-
-class FuncReturnTypeNode(TypeNode):
-    pass
+        return str(self.key)
 
 
 class BinOpNode(ExprNode):
@@ -376,41 +167,39 @@ class BinOpNode(ExprNode):
     def __str__(self) -> str:
         return str(self.op.value)
 
+    def semantic_check(self, scope: IdentScope) -> None:
+        self.arg1.semantic_check(scope)
+        self.arg2.semantic_check(scope)
 
-# TODO What is this?
-class VarsDeclNode(StmtNode):
-    def __init__(self, vars_type: TypeNode, *vars_list: Tuple[AstNode, ...],
-                 row: Optional[int] = None, line: Optional[int] = None, **props):
-        super().__init__(row=row, line=line, **props)
-        self.vars_type = vars_type
-        self.vars_list = vars_list
+        if self.arg1.node_type.is_simple or self.arg2.node_type.is_simple:
+            compatibility = BIN_OP_TYPE_COMPATIBILITY[self.op]
+            args_types = (self.arg1.node_type.base_type, self.arg2.node_type.base_type)
+            if args_types in compatibility:
+                self.node_type = TypeDesc.from_base_type(compatibility[args_types])
+                return
 
-    @property
-    def childs(self) -> Tuple[ExprNode, ...]:
-        return (self.vars_type,) + self.vars_list
+            if self.arg2.node_type.base_type in TYPE_CONVERTIBILITY:
+                for arg2_type in TYPE_CONVERTIBILITY[self.arg2.node_type.base_type]:
+                    args_types = (self.arg1.node_type.base_type, arg2_type)
+                    if args_types in compatibility:
+                        self.arg2 = type_convert(self.arg2, TypeDesc.from_base_type(arg2_type))
+                        self.node_type = TypeDesc.from_base_type(compatibility[args_types])
+                        return
+            if self.arg1.node_type.base_type in TYPE_CONVERTIBILITY:
+                for arg1_type in TYPE_CONVERTIBILITY[self.arg1.node_type.base_type]:
+                    args_types = (arg1_type, self.arg2.node_type.base_type)
+                    if args_types in compatibility:
+                        self.arg1 = type_convert(self.arg1, TypeDesc.from_base_type(arg1_type))
+                        self.node_type = TypeDesc.from_base_type(compatibility[args_types])
+                        return
 
-    def __str__(self) -> str:
-        return 'var'
-
-
-#TODO What is this?
-class VarsDeclListNode(StmtNode):
-    def __init__(self, *vars_decl: VarsDeclNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props):
-        super().__init__(row=row, line=line, **props)
-        self.vars_decl = vars_decl
-
-    @property
-    def childs(self) -> Tuple[VarsDeclNode, ...]:
-        return self.vars_decl
-
-    def __str__(self) -> str:
-        return 'vars_list'
+        self.semantic_error("Оператор {} не применим к типам ({}, {})".format(
+            self.op, self.arg1.node_type, self.arg2.node_type
+        ))
 
 
-class CallNode(StmtNode):
-
-    def __init__(self, func: IdentNode, *params: Tuple[ExprNode],
+class CallNode(ExprNode):
+    def __init__(self, func: IdentNode, *params: Tuple[ExprNode], #TODO ???
                  row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
         super().__init__(row=row, line=line, **props)
         self.func = func
@@ -461,20 +250,161 @@ class CallNode(StmtNode):
             self.node_type = func.type.return_type
 
 
-# TODO What is this?
-class ComplexIdentNode(StmtNode):
-    def __init__(self, var: IdentNode, index: ExprNode,
+class TypeConvertNode(ExprNode):
+
+    def __init__(self, expr: ExprNode, type_: TypeDesc,
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, col=col, **props)
+        self.expr = expr
+        self.type = type_
+        self.node_type = type_
+
+    def __str__(self) -> str:
+        return 'convert'
+
+    @property
+    def childs(self) -> Tuple[AstNode, ...]:
+        return (_GroupNode(str(self.type), self.expr),)
+
+
+def type_convert(expr: ExprNode, type_: TypeDesc, except_node: Optional[AstNode] = None,
+                 comment: Optional[str] = None) -> ExprNode:
+    """Метод преобразования ExprNode узла AST-дерева к другому типу
+    :param expr: узел AST-дерева
+    :param type_: требуемый тип
+    :param except_node: узел, о которого будет исключение
+    :param comment: комментарий
+    :return: узел AST-дерева c операцией преобразования
+    """
+
+    if expr.node_type is None:
+        except_node.semantic_error('Тип выражения не определен')
+    if expr.node_type == type_:
+        return expr
+    if expr.node_type.is_simple and type_.is_simple and \
+            expr.node_type.base_type in TYPE_CONVERTIBILITY and type_.base_type in TYPE_CONVERTIBILITY[expr.node_type.base_type]:
+        return TypeConvertNode(expr, type_)
+    else:
+        (except_node if except_node else expr).semantic_error('Тип {0}{2} не конвертируется в {1}'.format(
+            expr.node_type, type_, ' ({})'.format(comment) if comment else ''
+        ))
+
+
+class StmtNode(ExprNode, ABC):
+
+    def to_str_full(self):
+        return self.to_str()
+
+
+class VarsAssignNode(StmtNode):
+
+    def __init__(self, ident: IdentNode, var: TypeNode, val: Optional[ExprNode] = None,
+                 row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, Line=line, **props)
+        self.ident = ident
+        self.var = var
+        self.val = val
+
+    def __str__(self) -> str:
+        return '='
+
+    @property
+    def childs(self) -> Tuple[IdentNode, TypeNode, Optional[ExprNode]]:
+        return self.ident, self.var, *((self.val,) if self.val else tuple())
+
+    def semantic_check(self, scope: IdentScope) -> None:
+        self.var.semantic_check(scope)
+        self.ident.semantic_check(scope)
+        self.node_type = TypeDesc.VOID
+
+
+class AssignNode(ExprNode):
+    def __init__(self, var: IdentNode, val: ExprNode,
                  row: Optional[int] = None, line: Optional[int] = None, **props):
         super().__init__(row=row, line=line, **props)
         self.var = var
-        self.index = index
+        self.val = val
 
     @property
     def childs(self) -> Tuple[IdentNode, ExprNode]:
-        return self.var, self.index
+        return self.var, self.val
 
     def __str__(self) -> str:
-        return 'array_elem'
+        return '='
+
+    def semantic_check(self, scope: IdentScope) -> None:
+        self.var.semantic_check(scope)
+        self.val.semantic_check(scope)
+        self.val = type_convert(self.val, self.var.node_type, self, 'присваиваемое значение')
+        self.node_type = self.var.node_type
+
+
+class ReturnNode(StmtNode):
+
+    def __init__(self, val: ExprNode,
+                 row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, line=line, **props)
+        self.val = val
+
+    def __str__(self) -> str:
+        return 'Return'
+
+    @property
+    def childs(self) -> Tuple[ExprNode]:
+        return (self.val, )
+
+    def semantic_check(self, scope: IdentScope) -> None:
+        self.val.semantic_check(IdentScope(scope))
+        func = scope.curr_func
+        if func is None:
+            self.semantic_error('Оператор return применим только к функции')
+        self.val = type_convert(self.val, func.func.type.return_type, self, 'возвращаемое значение')
+        self.node_type = TypeDesc.VOID
+
+
+class FuncVarNode(ExprNode):
+    def __init__(self, type_: TypeNode, ident: IdentNode,
+                 row: Optional[int] = None, line: Optional[int] = None, **props):
+        super().__init__(row=row, line=line, **props)
+        self.type = type_
+        self.ident = ident
+
+    @property
+    def childs(self) -> tuple[TypeNode, IdentNode]:
+        return self.type, self.ident
+
+    def __str__(self) -> str:
+        return 'var-sign'
+
+    def semantic_check(self, scope: IdentScope) -> None:
+        self.type.semantic_check(scope)
+        self.ident.node_type = self.type.type
+        try:
+            self.ident.node_ident = scope.add_ident(IdentDesc(self.ident.name, self.type.type, ScopeType.PARAM))
+        except SemanticException:
+            raise self.ident.semantic_error('Параметр {} уже объявлен'.format(self.ident.name))
+        self.node_type = TypeDesc.VOID
+
+
+class FuncVarsListNode(ExprNode):
+    def __init__(self, *vars: FuncVarNode,
+                 row: Optional[int] = None, line: Optional[int] = None, **props):
+        super().__init__(row=row, line=line, **props)
+        self.vars = vars
+
+    @property
+    def childs(self) -> Tuple[FuncVarNode, ...]:
+        return self.vars
+
+    def __str__(self) -> str:
+        return 'func-vars'
+
+    def semantic_check(self, scope: IdentScope) -> None:
+        scope.func = _empty_ident
+        params = []
+        for param in self.vars:
+            param.semantic_check(scope)
+            params.append(param.type.type)
 
 
 class IfNode(StmtNode):
@@ -500,34 +430,42 @@ class IfNode(StmtNode):
             self.else_stmt.semantic_check(IdentScope(scope))
         self.node_type = TypeDesc.VOID
 
+    def msil(self, gen: CodeGenerator) -> None:
+        self.cond.msil(gen)
+        gen.add('    ldc.i4', 0)
+        gen.add('    ceq')
+        else_label = CodeLabel()
+        end_label = CodeLabel()
+        gen.add('    brtrue', else_label)
+        self.then_stmt.msil(gen)
+        gen.add('    br', end_label)
+        gen.add('', label=else_label)
+        if self.else_stmt:
+            self.else_stmt.msil(gen)
+        gen.add('', label=end_label)
+
 
 class ForNode(StmtNode):
-    def __init__(self, cond: StmtNode, expr: ExprNode, then_stmt: StmtNode,
+    def __init__(self, cond: StmtNode, expr: ExprNode, stmt: StmtNode,
                  row: Optional[int] = None, line: Optional[int] = None, **props):
         super().__init__(row=row, line=line, **props)
         self.cond = cond
         self.expr = expr
-        self.then_stmt = then_stmt
+        self.stmt = stmt
 
     @property
     def childs(self) -> tuple[StmtNode, ExprNode, StmtNode]:
-        return self.cond, self.expr, self.then_stmt
+        return self.cond, self.expr, self.stmt
 
     def __str__(self) -> str:
         return 'For'
 
-    def childs(self) -> Tuple[AstNode, ...]:
-        return self.init, self.cond, self.step, self.body
-
     def semantic_check(self, scope: IdentScope) -> None:
-        scope = IdentScope(scope)
-        self.init.semantic_check(scope)
         if self.cond == _empty:
-            self.cond = LiteralNode('true')
+            self.cond = LiteralNode('True')
         self.cond.semantic_check(scope)
         self.cond = type_convert(self.cond, TypeDesc.BOOL, None, 'условие')
-        self.step.semantic_check(scope)
-        self.body.semantic_check(IdentScope(scope))
+        self.stmt.semantic_check(IdentScope(scope))
         self.node_type = TypeDesc.VOID
 
 
@@ -563,48 +501,33 @@ class DoWhileNode(StmtNode):
 
 class StmtListNode(StmtNode):
     def __init__(self, *exprs: StmtNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props):
-        super().__init__(row=row, line=line, **props)
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, col=col, **props)
         self.exprs = exprs
+        self.program = False
+
+    def __str__(self) -> str:
+        return '...'
 
     @property
     def childs(self) -> Tuple[StmtNode, ...]:
         return self.exprs
 
-    def __str__(self) -> str:
-        return ""
-
-
-class ParamNode(StmtNode):
-    """Класс для представления в AST-дереве объявления параметра функции
-    """
-
-    def __init__(self, type_: TypeNode, name: IdentNode,
-                 row: Optional[int] = None, line: Optional[int] = None, **props) -> None:
-        super().__init__(row=row, line=line, **props)
-        self.type = type_
-        self.name = name
-
-    def __str__(self) -> str:
-        return str(self.type)
-
-    @property
-    def childs(self) -> Tuple[IdentNode]:
-        return self.name,
-
     def semantic_check(self, scope: IdentScope) -> None:
-        self.type.semantic_check(scope)
-        self.name.node_type = self.type.type
-        try:
-            self.name.node_ident = scope.add_ident(IdentDesc(self.name.name, self.type.type, ScopeType.PARAM))
-        except SemanticException:
-            raise self.name.semantic_error('Параметр {} уже объявлен'.format(self.name.name))
+        if not self.program:
+            scope = IdentScope(scope)
+        for expr in self.exprs:
+            expr.semantic_check(scope)
         self.node_type = TypeDesc.VOID
+
+    def msil(self, gen: CodeGenerator) -> None:
+        for expr in self.exprs:
+            expr.msil(gen)
 
 
 class FuncNode(StmtNode):
-    def __init__(self, name: IdentNode, func_vars: ParamNode, return_type: TypeNode,
-                 stmt_list: StmtListNode,
+    def __init__(self, name: IdentNode, func_vars: FuncVarsListNode, return_type: TypeNode,
+                 stmt_list: StmtNode,
                  row: Optional[int] = None, line: Optional[int] = None, **props):
         super().__init__(row=row, line=line, **props)
         self.return_type = return_type
@@ -614,12 +537,10 @@ class FuncNode(StmtNode):
 
     def __str__(self) -> str:
         return 'Function'
-    @property
-    def childs(self) -> Tuple[Optional[FuncVarsListNode], StmtListNode]:
-        return ((self.func_vars,) if self.func_vars else tuple()) + (self.stmt_list,)
 
-    def __str__(self) -> str:
-        return '({0}) func {1}'.format(self.return_type, self.name)
+    @property
+    def childs(self) -> Tuple[AstNode, ...]:
+        return _GroupNode(str(self.return_type), self.name), self.func_vars, self.stmt_list
 
     def semantic_check(self, scope: IdentScope) -> None:
         if scope.curr_func:
@@ -632,12 +553,13 @@ class FuncNode(StmtNode):
         # временно хоть какое-то значение, чтобы при добавлении параметров находить scope функции
         scope.func = _empty_ident
         params = []
-        for param in self.params:
+        for var in self.func_vars.vars:
             # при проверке параметров происходит их добавление в scope
-            param.semantic_check(scope)
-            params.append(param.type.type)
+            # var.semantic_check(scope)
+            # params.append(var.type.type)
+            scope.add_ident(IdentDesc(var.type.name, var.ident.type))
 
-        type_ = TypeDesc(None, self.type.type, tuple(params))
+        type_ = TypeDesc(None, self.return_type.type, tuple(params))
         func_ident = IdentDesc(self.name.name, type_)
         scope.func = func_ident
         self.name.node_type = type_
@@ -645,12 +567,33 @@ class FuncNode(StmtNode):
             self.name.node_ident = parent_scope.curr_global.add_ident(func_ident)
         except SemanticException as e:
             self.name.semantic_error("Повторное объявление функции {}".format(self.name.name))
-        self.body.semantic_check(scope)
+        self.stmt_list.semantic_check(scope)
         self.node_type = TypeDesc.VOID
+
+    def msil(self, gen: CodeGenerator) -> None:
+        params = ''
+        for p in self.func_vars:
+            if len(params) > 0:
+                params += ', '
+            params += 'int32 ' + str(p.name.name)
+        gen.add('  .method public static void {}({}) cil managed'.format(self.name, params))
+        '''
+        if 
+        line = '.local init'
+
+        .locals
+        init([0]
+        int32
+        c,
+        [1]
+        int32
+        CS$1$0000)
+        '''
+        self.stmt_list.msil(gen)
 
 
 class ProgNode(StmtNode):
-    def __init__(self, *funcs_and_vars: StmtNode, row: Optional[int] = None, line: Optional[int] = None, **props):
+    def __init__(self, *funcs_and_vars: StmtListNode, row: Optional[int] = None, line: Optional[int] = None, **props):
         super().__init__(row=row, line=line, **props)
         self.funcs_and_vars = funcs_and_vars
 

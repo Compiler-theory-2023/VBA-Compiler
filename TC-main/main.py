@@ -4,28 +4,36 @@ import mel_semantic
 
 
 def main():
-    prog = '''    
+    prog = ''' 
         Function myFunc(a As Integer, b As String) As String
             Dim c As Integer = 10
+            c = c + 10
             If (a>5) Then
                 Dim s As Integer = 3
             Else 
                 Dim s As Integer = 3
             End If 
+            For index As Integer = 1 To 5
             While (a>5) 
                 Dim s As Integer = 3
             End While                 
-            
+            Next
             Do While (a>5) 
                 Dim s As Integer = 3
-            Loop          
+            Loop  
+            Return a        
         End Function
         
         Function myFunc2(a As Integer, b As Boolean) As Integer
+            Do While (a>5) 
+                Dim s As Integer = 3
+            Loop  
         End Function
 
-        
-    
+    '''
+    prog1 = '''
+            Function myFunc(a As Integer, b As String) As String
+            End Function
     '''
     execute(prog)
 
@@ -46,6 +54,20 @@ def execute(prog: str) -> None:
         print('Ошибка: {}'.format(e.message))
         return
     print()
+
+    '''
+    print('msil:')
+    try:
+        gen = msil.CodeGenerator()
+        gen.start()
+        prog.msil(gen)
+        gen.end()
+        print(*gen.code, sep=os.linesep)
+    except semantic.SemanticException as e:
+        print('Ошибка: {}'.format(e.message))
+        return
+    print()
+    '''
 
 
 if __name__ == "__main__":
